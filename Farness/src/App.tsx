@@ -13,6 +13,7 @@ import BlogPage from './pages/BlogPage';
 import BlogPostPage from './pages/BlogPostPage';
 import MouseFollowGlow from './components/MouseFollowGlow';
 import ChatBot from './components/ChatBot';
+import WelcomeSound from './components/WelcomeSound';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -30,6 +31,7 @@ export default function App() {
           <ScrollToTop />
           <MouseFollowGlow />
           <ChatBot />
+          <WelcomeSound />
           <div className="min-h-screen bg-white dark:bg-slate-950 text-gray-900 dark:text-white overflow-x-hidden transition-colors duration-300">
             <Routes>
               <Route path="/" element={<HomePage />} />
