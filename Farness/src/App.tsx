@@ -9,6 +9,8 @@ import TechnologyPage from './pages/TechnologyPage';
 import IndustriesPage from './pages/IndustriesPage';
 import PlatformPage from './pages/PlatformPage';
 import StatsPage from './pages/StatsPage';
+import BlogPage from './pages/BlogPage';
+import BlogPostPage from './pages/BlogPostPage';
 import MouseFollowGlow from './components/MouseFollowGlow';
 
 function ScrollToTop() {
@@ -34,6 +36,8 @@ export default function App() {
               <Route path="/industries" element={<IndustriesPage />} />
               <Route path="/platform" element={<PlatformPage />} />
               <Route path="/stats" element={<StatsPage />} />
+              <Route path="/blog" element={<BlogPage />} />
+              <Route path="/blog/:postId" element={<BlogPostPage />} />
             </Routes>
           </div>
         </ThemeProvider>

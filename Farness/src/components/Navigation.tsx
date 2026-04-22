@@ -27,6 +27,7 @@ const navItems = [
     ],
   },
   { label: 'Platform', path: '/platform' },
+  { label: 'Blog', path: '/blog' },
   { label: 'About', path: '/#about' },
 ];
 

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowUpRight, Brain, Cpu, Factory, Command, Check
+  ArrowUpRight, Brain, Cpu, Factory, Command, Check, BookOpen
 } from 'lucide-react';
 
 const panels = [
@@ -55,6 +55,19 @@ const panels = [
       'Mission control, live monitoring, and compliance reporting — unified in a single interface your team already understands.',
     highlight: 'Enterprise-Grade',
     icon: Command,
+    featured: false,
+  },
+  {
+    id: 'blog',
+    path: '/blog',
+    number: '05',
+    label: 'Insights & Stories',
+    title: 'Blog',
+    tagline: 'Knowledge shared.',
+    description:
+      'Deep dives into autonomous systems, drone technology, and industrial AI. Expert insights and real-world case studies.',
+    highlight: 'Expert Insights',
+    icon: BookOpen,
     featured: false,
   },
 ];
