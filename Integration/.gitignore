@@ -1,0 +1,42 @@
+# Data files — too large for git
+*.tif
+*.tiff
+*.laz
+*.las
+*.zip
+*.pt
+*.pth
+*.pdf
+*.xlsx
+*.png
+*.jpg
+*.JPG
+*.json
+
+# Data/output folders
+files/
+files1/
+files2/
+new/
+new files/
+results/
+output*/
+stockpile_output*/
+zee_files/
+entwine_pointcloud/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.eggs/
+*.so
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Claude
+.claude/
