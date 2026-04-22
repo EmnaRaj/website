@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, Phone, Mail, MapPin } from 'lucide-react';
+import { MessageCircle, X, Send, Loader } from 'lucide-react';
+import { FARNESS_SYSTEM_PROMPT } from '../utils/farnessContext';
 
 interface Message {
   id: string;
@@ -16,134 +17,21 @@ interface FormData {
   phone: string;
 }
 
-const botResponses: { [key: string]: string } = {
-  'what is farness': `Farness is an autonomous drone platform powered by AI. We help industrial companies inspect pipelines, mines, infrastructure, and facilities without putting crews at risk. Our drones can operate 24/7, deliver survey-grade accuracy, and integrate with your existing workflows.`,
-
-  'how does it work': `Our AI-powered drones autonomously:
-1. Plan missions from natural language commands
-2. Adapt in real-time to environmental changes
-3. Analyze imagery with deep learning (thermal, visual, LiDAR)
-4. Deliver actionable results instantly
-All processing happens on-board—no cloud dependency needed.`,
-
-  'what can you inspect': `We handle:
-• Pipelines (leak detection, corrosion mapping)
-• Stockpiles (volumetric analysis, mining surveys)
-• Infrastructure (bridges, dams, towers, roads)
-• Industrial facilities (tanks, flare stacks, confined spaces)
-• Power lines & transmission towers
-• Solar & wind farms
-• Mining sites & quarries`,
-
-  'what industries': `We serve:
-🏔️ Mining - Stockpile analysis & haul road monitoring
-⚡ Energy & Utilities - Pipeline & grid inspection
-🏢 Infrastructure - Bridges, dams, roads, construction
-🏭 Industrial Facilities - Tank & facility monitoring`,
-
-  'how much does it cost': `Pricing depends on your specific needs—site size, frequency, complexity. Schedule a consultation and we'll provide a custom quote. Demo scheduling is free, and we usually see ROI within 6-12 months.`,
-
-  'what about safety': `Safety is core to Farness:
-✓ Eliminates crew exposure to hazardous zones
-✓ Autonomous operation with built-in failsafes
-✓ Real-time monitoring and alerts
-✓ Full compliance documentation
-✓ Insurance-backed operations`,
-
-  'how accurate is it': `Our system delivers:
-• ±2cm accuracy (survey-grade precision)
-• 99.2% anomaly detection rate
-• Thermal + visual analysis simultaneously
-• Real-time defect classification`,
-
-  'do you offer training': `Yes! We provide:
-• Onboarding training for your team
-• Operator certification
-• Ongoing technical support
-• Custom workflow integration
-Ask our team about training packages.`,
-
-  'how long does setup take': `Typically 2-4 weeks:
-Week 1: Site assessment & planning
-Week 2: Equipment deployment & calibration
-Week 3-4: Training & integration
-Emergency deployments available for critical operations.`,
-
-  'contact us': `📞 Phone: +1 (555) 123-4567
-📧 Email: hello@farness.com
-🌍 Website: www.farness.com
-💬 Chat with us right here!
-
-Or schedule a consultation below—let's discuss your specific needs.`,
-
-  'schedule a demo': `I'd love to help! To book your demo, I can either:
-1. Get your info and schedule it for you right now
-2. Let you book directly using our calendar
-
-Which would you prefer?`,
-
-  'yes schedule me': `Perfect! I'll collect your info and get you scheduled.
-
-What's your name?`,
-
-  'thanks': `You're welcome! Any other questions about Farness?`,
-
-  'hello': `Hey there! 👋 I'm Farness Bot. I can help you with:
-• What Farness does
-• How our technology works
-• Which industries we serve
-• Pricing & ROI
-• Safety & accuracy
-• Scheduling a demo
-• Contact information
-
-What would you like to know?`,
-
-  'hi': `Hey! 👋 I'm Farness Bot. How can I help?
-Ask me about our technology, industries, pricing, or schedule a demo!`,
-
-  'help': `I'm here to help! You can ask me about:
-• What is Farness?
-• How does it work?
-• What can you inspect?
-• Industries we serve
-• Cost & pricing
-• Safety features
-• Accuracy specs
-• Training & support
-• Demo scheduling
-• Contact information
-
-What would you like to know?`,
-
-  'default': `Great question! To get more detailed information or discuss your specific needs, I'd recommend scheduling a consultation with our team. They can provide personalized solutions.
-
-Would you like to schedule a demo?`,
-};
-
-const findResponse = (userInput: string): string => {
-  const input = userInput.toLowerCase().trim();
-
-  for (const [key, response] of Object.entries(botResponses)) {
-    if (input.includes(key) || key.includes(input)) {
-      return response;
-    }
-  }
-
-  return botResponses['default'];
-};
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || '';
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: `Hey! 👋 I'm Farness Bot. I'm here to help answer questions about Farness, what we do, and how we can help your operations. How can I assist you today?`,
+      text: `Hey! 👋 I'm Farness Bot, an intelligent AI assistant. I'm here to answer any questions about Farness, our autonomous drone platform, how we serve different industries, and help you schedule a demo. What can I help you with today?`,
       sender: 'bot',
       timestamp: new Date(),
     },
   ]);
   const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [isCollectingInfo, setIsCollectingInfo] = useState(false);
   const [infoStep, setInfoStep] = useState<'name' | 'email' | 'company' | 'phone' | null>(null);
   const [formData, setFormData] = useState<FormData>({
@@ -152,6 +40,7 @@ export default function ChatBot() {
     company: '',
     phone: '',
   });
+  const [conversationHistory, setConversationHistory] = useState<Array<{ role: string; content: string }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -162,9 +51,47 @@ export default function ChatBot() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (text?: string) => {
+  const callGroqAPI = async (userMessage: string, history: Array<{ role: string; content: string }>) => {
+    try {
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: FARNESS_SYSTEM_PROMPT,
+            },
+            ...history,
+            {
+              role: 'user',
+              content: userMessage,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 1024,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.choices[0].message.content;
+    } catch (error) {
+      console.error('Groq API error:', error);
+      return `I apologize, but I'm having trouble connecting to my knowledge base at the moment. Please try again or contact our team directly at hello@farness.com or +1 (555) 123-4567.`;
+    }
+  };
+
+  const handleSendMessage = async (text?: string) => {
     const messageText = text || inputValue;
-    if (!messageText.trim()) return;
+    if (!messageText.trim() || isLoading) return;
 
     // Add user message
     const userMessage: Message = {
@@ -175,6 +102,7 @@ export default function ChatBot() {
     };
     setMessages((prev) => [...prev, userMessage]);
     setInputValue('');
+    setIsLoading(true);
 
     // Handle info collection flow
     if (isCollectingInfo) {
@@ -183,21 +111,23 @@ export default function ChatBot() {
         setInfoStep('email');
         const botMsg: Message = {
           id: (Date.now() + 1).toString(),
-          text: 'Great! What\'s your email address?',
+          text: 'Thanks! What\'s your email address?',
           sender: 'bot',
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, botMsg]);
+        setIsLoading(false);
       } else if (infoStep === 'email') {
         setFormData((prev) => ({ ...prev, email: messageText }));
         setInfoStep('company');
         const botMsg: Message = {
           id: (Date.now() + 1).toString(),
-          text: 'What\'s your company name?',
+          text: 'Great! What\'s your company name?',
           sender: 'bot',
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, botMsg]);
+        setIsLoading(false);
       } else if (infoStep === 'company') {
         setFormData((prev) => ({ ...prev, company: messageText }));
         setInfoStep('phone');
@@ -208,81 +138,96 @@ export default function ChatBot() {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, botMsg]);
+        setIsLoading(false);
       } else if (infoStep === 'phone') {
         setFormData((prev) => ({ ...prev, phone: messageText }));
 
-        // Schedule complete
+        // Schedule complete - send to backend or handle
+        const completeData = {
+          ...formData,
+          phone: messageText,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Here you would normally send this to your backend
+        console.log('Demo scheduled with info:', completeData);
+
         const completeMsg: Message = {
           id: (Date.now() + 1).toString(),
-          text: `Perfect! I've got your info:
+          text: `Perfect! I've got all your information:
+
 📝 Name: ${formData.name}
-📧 Email: ${messageText}
+📧 Email: ${formData.email}
 🏢 Company: ${formData.company}
 📞 Phone: ${messageText}
 
-Our team will contact you shortly to schedule your demo. You can also scroll down and book directly in our calendar. Thanks for your interest in Farness!`,
+Our team will contact you shortly at ${formData.email} to confirm your demo and answer any specific questions about your operation. We typically get back to you within 24 hours.
+
+Is there anything else you'd like to know about Farness in the meantime?`,
           sender: 'bot',
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, completeMsg]);
         setIsCollectingInfo(false);
         setInfoStep(null);
+        setIsLoading(false);
       }
       return;
     }
 
-    // Regular conversation flow
-    const response = findResponse(messageText);
+    // Update conversation history
+    const updatedHistory = [
+      ...conversationHistory,
+      { role: 'user', content: messageText },
+    ];
 
-    // Check if user wants to schedule
-    const wantsSchedule = messageText.toLowerCase().includes('schedule') ||
-                         messageText.toLowerCase().includes('demo') ||
-                         messageText.toLowerCase().includes('book');
+    // Get response from Groq API
+    const botResponse = await callGroqAPI(messageText, conversationHistory);
 
+    // Update conversation history with bot response
+    const newHistory = [
+      ...updatedHistory,
+      { role: 'assistant', content: botResponse },
+    ];
+    setConversationHistory(newHistory);
+
+    // Add bot response message
     const botMessage: Message = {
       id: (Date.now() + 1).toString(),
-      text: response,
+      text: botResponse,
       sender: 'bot',
       timestamp: new Date(),
     };
     setMessages((prev) => [...prev, botMessage]);
+    setIsLoading(false);
 
-    // If asking about scheduling or yes, start collecting info
-    if (wantsSchedule && !messageText.toLowerCase().includes('yes schedule')) {
-      setTimeout(() => {
-        const followUp: Message = {
-          id: (Date.now() + 2).toString(),
-          text: 'Would you like me to collect your information and get you scheduled? Just say "yes schedule me"',
-          sender: 'bot',
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, followUp]);
-      }, 500);
-    } else if (messageText.toLowerCase().includes('yes schedule')) {
+    // Check if user wants to schedule demo
+    const schedulingKeywords = ['schedule', 'demo', 'book', 'booking', 'appointment'];
+    const wantsScheduling = schedulingKeywords.some((keyword) =>
+      messageText.toLowerCase().includes(keyword)
+    );
+
+    if (wantsScheduling && !isCollectingInfo) {
       setTimeout(() => {
         setIsCollectingInfo(true);
         setInfoStep('name');
-        const scheduleStart: Message = {
+        const scheduleMsg: Message = {
           id: (Date.now() + 2).toString(),
-          text: 'Awesome! Let\'s get you scheduled. What\'s your name?',
+          text: `Great! I can help you schedule a demo. To get started, could you please tell me your name?`,
           sender: 'bot',
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, scheduleStart]);
+        setMessages((prev) => [...prev, scheduleMsg]);
       }, 500);
     }
   };
 
-  const handleQuickQuestion = (question: string) => {
-    handleSendMessage(question);
-  };
-
-  const quickQuestions = [
+  const suggestedQuestions = [
     'What is Farness?',
     'How does it work?',
-    'What industries?',
+    'Industries & use cases',
+    'Pricing & ROI',
     'Schedule a demo',
-    'Contact us',
   ];
 
   return (
@@ -299,14 +244,14 @@ Our team will contact you shortly to schedule your demo. You can also scroll dow
             style={{ height: '600px' }}
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-500 text-white px-6 py-4 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-4 flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-lg">Farness Bot</h3>
-                <p className="text-sm text-blue-100">Always here to help</p>
+                <p className="text-sm text-blue-100">Powered by AI - Always learning</p>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
-                className="text-white hover:bg-blue-700/50 p-2 rounded-lg transition-colors"
+                className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors"
               >
                 <X size={20} />
               </button>
@@ -328,23 +273,38 @@ Our team will contact you shortly to schedule your demo. You can also scroll dow
                         : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white rounded-bl-none border border-gray-200 dark:border-white/10'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
                   </div>
                 </motion.div>
               ))}
+
+              {isLoading && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex justify-start"
+                >
+                  <div className="bg-white dark:bg-slate-800 text-gray-900 dark:text-white rounded-xl rounded-bl-none border border-gray-200 dark:border-white/10 px-4 py-3 flex items-center gap-2">
+                    <Loader size={16} className="animate-spin" />
+                    <span className="text-sm">Thinking...</span>
+                  </div>
+                </motion.div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
 
             {/* Quick Questions */}
-            {!isCollectingInfo && messages.length <= 2 && (
+            {!isCollectingInfo && messages.length <= 2 && !isLoading && (
               <div className="px-6 py-4 border-t border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900">
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 font-semibold">Quick questions:</p>
                 <div className="flex flex-wrap gap-2">
-                  {quickQuestions.map((question) => (
+                  {suggestedQuestions.map((question) => (
                     <button
                       key={question}
-                      onClick={() => handleQuickQuestion(question)}
-                      className="text-xs bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap"
+                      onClick={() => handleSendMessage(question)}
+                      disabled={isLoading}
+                      className="text-xs bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap disabled:opacity-50"
                     >
                       {question}
                     </button>
@@ -361,12 +321,14 @@ Our team will contact you shortly to schedule your demo. You can also scroll dow
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Type your message..."
-                  className="flex-1 bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Ask me anything..."
+                  disabled={isLoading}
+                  className="flex-1 bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 />
                 <button
                   onClick={() => handleSendMessage()}
-                  className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors"
+                  disabled={isLoading}
+                  className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-lg transition-colors disabled:opacity-50"
                 >
                   <Send size={18} />
                 </button>
@@ -403,8 +365,10 @@ Our team will contact you shortly to schedule your demo. You can also scroll dow
               animate={{ rotate: 0, opacity: 1 }}
               exit={{ rotate: -90, opacity: 0 }}
               transition={{ duration: 0.2 }}
+              className="relative"
             >
               <MessageCircle size={24} />
+              <span className="absolute top-0 right-0 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
             </motion.div>
           )}
         </AnimatePresence>
