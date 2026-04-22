@@ -12,6 +12,7 @@ import StatsPage from './pages/StatsPage';
 import BlogPage from './pages/BlogPage';
 import BlogPostPage from './pages/BlogPostPage';
 import MouseFollowGlow from './components/MouseFollowGlow';
+import ChatBot from './components/ChatBot';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -28,6 +29,7 @@ export default function App() {
         <ThemeProvider>
           <ScrollToTop />
           <MouseFollowGlow />
+          <ChatBot />
           <div className="min-h-screen bg-white dark:bg-slate-950 text-gray-900 dark:text-white overflow-x-hidden transition-colors duration-300">
             <Routes>
               <Route path="/" element={<HomePage />} />
