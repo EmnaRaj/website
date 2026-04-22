@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageCircle, X, Send, Loader } from 'lucide-react';
+import { MessageCircle, X, Send, Loader, ArrowRight } from 'lucide-react';
 import { FARNESS_SYSTEM_PROMPT } from '../utils/farnessContext';
 
 interface Message {
@@ -8,39 +8,47 @@ interface Message {
   text: string;
   sender: 'bot' | 'user';
   timestamp: Date;
+  suggestions?: string[];
 }
 
-interface FormData {
+interface ScheduleData {
   name: string;
   email: string;
   company: string;
   phone: string;
+  industry: string;
+  challenge: string;
 }
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || '';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+const industries = ['Mining', 'Energy & Utilities', 'Infrastructure', 'Industrial Facilities'];
 
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: `Hey! 👋 I'm Farness Bot, an intelligent AI assistant. I'm here to answer any questions about Farness, our autonomous drone platform, how we serve different industries, and help you schedule a demo. What can I help you with today?`,
+      text: `Hey! 👋 I'm Farness Bot. I help companies understand how autonomous drone technology can transform their industrial operations.
+
+What would you like to know?`,
       sender: 'bot',
       timestamp: new Date(),
+      suggestions: [
+        'What is Farness?',
+        'Which industry are you in?',
+        'How does it work?',
+        'Schedule a demo',
+      ],
     },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isCollectingInfo, setIsCollectingInfo] = useState(false);
-  const [infoStep, setInfoStep] = useState<'name' | 'email' | 'company' | 'phone' | null>(null);
-  const [formData, setFormData] = useState<FormData>({
-    name: '',
-    email: '',
-    company: '',
-    phone: '',
-  });
+  const [scheduleStep, setScheduleStep] = useState<keyof ScheduleData | null>(null);
+  const [scheduleData, setScheduleData] = useState<Partial<ScheduleData>>({});
   const [conversationHistory, setConversationHistory] = useState<Array<{ role: string; content: string }>>([]);
+  const [detectedIndustry, setDetectedIndustry] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -51,8 +59,68 @@ export default function ChatBot() {
     scrollToBottom();
   }, [messages]);
 
+  const validateEmail = (email: string): boolean => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const getSuggestedQuestions = (userMessage: string): string[] => {
+    const lower = userMessage.toLowerCase();
+
+    if (lower.includes('mining') || lower.includes('stockpile')) {
+      return [
+        'How fast is stockpile surveying?',
+        'What are the safety benefits?',
+        'How much can we save annually?',
+        'Schedule a demo for mining',
+      ];
+    }
+    if (lower.includes('energy') || lower.includes('pipeline') || lower.includes('solar')) {
+      return [
+        'What detection accuracy do you have?',
+        'Can you monitor 24/7?',
+        'How does cost compare to helicopters?',
+        'Schedule a demo for energy',
+      ];
+    }
+    if (lower.includes('infrastructure') || lower.includes('bridge') || lower.includes('dam')) {
+      return [
+        'How do you eliminate access risk?',
+        'What about inspection accuracy?',
+        'How much faster than traditional methods?',
+        'Schedule a demo for infrastructure',
+      ];
+    }
+    if (lower.includes('industrial') || lower.includes('tank') || lower.includes('facility')) {
+      return [
+        'Can you work without shutdowns?',
+        'How safe is confined space access?',
+        'What is the typical ROI?',
+        'Schedule a demo for industrial',
+      ];
+    }
+
+    return [
+      'Tell me about specific industries',
+      'How accurate is your technology?',
+      'What\'s the ROI timeline?',
+      'Schedule a demo',
+    ];
+  };
+
   const callGroqAPI = async (userMessage: string, history: Array<{ role: string; content: string }>) => {
     try {
+      const systemPromptWithContext = `${FARNESS_SYSTEM_PROMPT}
+
+## CURRENT CONVERSATION CONTEXT
+User's detected industry: ${detectedIndustry || 'Not yet determined'}
+Messages in conversation: ${history.length}
+
+## INSTRUCTION FOR THIS RESPONSE
+- Provide a concise response (2-3 sentences max)
+- End with a relevant follow-up question or suggestion
+- Stay factual - only mention what's in the ground truth
+- If user asks about scheduling, acknowledge but don't process - you'll guide them to the form`;
+
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
@@ -64,7 +132,7 @@ export default function ChatBot() {
           messages: [
             {
               role: 'system',
-              content: FARNESS_SYSTEM_PROMPT,
+              content: systemPromptWithContext,
             },
             ...history,
             {
@@ -72,8 +140,9 @@ export default function ChatBot() {
               content: userMessage,
             },
           ],
-          temperature: 0.7,
-          max_tokens: 1024,
+          temperature: 0.5,
+          max_tokens: 512,
+          top_p: 0.9,
         }),
       });
 
@@ -85,7 +154,48 @@ export default function ChatBot() {
       return data.choices[0].message.content;
     } catch (error) {
       console.error('Groq API error:', error);
-      return `I apologize, but I'm having trouble connecting to my knowledge base at the moment. Please try again or contact our team directly at hello@farness.com or +1 (555) 123-4567.`;
+      return `I'm having trouble connecting right now. Please contact our team directly:
+📞 +1 (555) 123-4567
+📧 hello@farness.com`;
+    }
+  };
+
+  const handleScheduleSubmit = async () => {
+    if (scheduleData.name && scheduleData.email && scheduleData.company && scheduleData.phone && scheduleData.industry) {
+      const bookingData = {
+        ...scheduleData,
+        timestamp: new Date().toISOString(),
+      };
+
+      console.log('Demo booked:', bookingData);
+
+      const confirmMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: `✅ Perfect! Your demo is scheduled!
+
+📝 Name: ${scheduleData.name}
+📧 Email: ${scheduleData.email}
+🏢 Company: ${scheduleData.company}
+🏭 Industry: ${scheduleData.industry}
+📞 Phone: ${scheduleData.phone}
+${scheduleData.challenge ? `\n💭 Challenge: ${scheduleData.challenge}` : ''}
+
+Our team will contact you within 24 hours to confirm the demo time. You should also see a confirmation email shortly.
+
+Is there anything else you'd like to know about Farness before your demo?`,
+        sender: 'bot',
+        timestamp: new Date(),
+        suggestions: [
+          'Tell me more about AI agents',
+          'How does edge computing work?',
+          'What drones do you use?',
+          'Back to main menu',
+        ],
+      };
+
+      setMessages((prev) => [...prev, confirmMsg]);
+      setScheduleStep(null);
+      setScheduleData({});
     }
   };
 
@@ -104,130 +214,146 @@ export default function ChatBot() {
     setInputValue('');
     setIsLoading(true);
 
-    // Handle info collection flow
-    if (isCollectingInfo) {
-      if (infoStep === 'name') {
-        setFormData((prev) => ({ ...prev, name: messageText }));
-        setInfoStep('email');
-        const botMsg: Message = {
+    // Detect industry from message
+    const lower = messageText.toLowerCase();
+    if (lower.includes('mining')) setDetectedIndustry('Mining');
+    else if (lower.includes('energy') || lower.includes('pipeline')) setDetectedIndustry('Energy & Utilities');
+    else if (lower.includes('infrastructure') || lower.includes('bridge')) setDetectedIndustry('Infrastructure');
+    else if (lower.includes('industrial') || lower.includes('tank')) setDetectedIndustry('Industrial Facilities');
+
+    // Handle scheduling flow
+    if (scheduleStep) {
+      if (scheduleStep === 'name') {
+        setScheduleData((prev) => ({ ...prev, name: messageText }));
+        setScheduleStep('email');
+        const nextMsg: Message = {
           id: (Date.now() + 1).toString(),
-          text: 'Thanks! What\'s your email address?',
+          text: 'What\'s your work email address?',
           sender: 'bot',
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, botMsg]);
+        setMessages((prev) => [...prev, nextMsg]);
         setIsLoading(false);
-      } else if (infoStep === 'email') {
-        setFormData((prev) => ({ ...prev, email: messageText }));
-        setInfoStep('company');
-        const botMsg: Message = {
+        return;
+      } else if (scheduleStep === 'email') {
+        if (!validateEmail(messageText)) {
+          const invalidMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            text: 'Please enter a valid email address (e.g., name@company.com)',
+            sender: 'bot',
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, invalidMsg]);
+          setIsLoading(false);
+          return;
+        }
+        setScheduleData((prev) => ({ ...prev, email: messageText }));
+        setScheduleStep('company');
+        const nextMsg: Message = {
           id: (Date.now() + 1).toString(),
-          text: 'Great! What\'s your company name?',
+          text: 'What\'s your company name?',
           sender: 'bot',
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, botMsg]);
+        setMessages((prev) => [...prev, nextMsg]);
         setIsLoading(false);
-      } else if (infoStep === 'company') {
-        setFormData((prev) => ({ ...prev, company: messageText }));
-        setInfoStep('phone');
-        const botMsg: Message = {
+        return;
+      } else if (scheduleStep === 'company') {
+        setScheduleData((prev) => ({ ...prev, company: messageText }));
+        setScheduleStep('phone');
+        const nextMsg: Message = {
           id: (Date.now() + 1).toString(),
-          text: 'And finally, your phone number?',
+          text: 'What\'s your phone number? (include country code)',
           sender: 'bot',
           timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, botMsg]);
+        setMessages((prev) => [...prev, nextMsg]);
         setIsLoading(false);
-      } else if (infoStep === 'phone') {
-        const completedFormData = {
-          ...formData,
-          phone: messageText,
-          timestamp: new Date().toISOString(),
-        };
-
-        // Schedule complete - send to backend or handle
-        console.log('Demo scheduled with info:', completedFormData);
-
-        const completeMsg: Message = {
+        return;
+      } else if (scheduleStep === 'phone') {
+        setScheduleData((prev) => ({ ...prev, phone: messageText }));
+        setScheduleStep('industry');
+        const nextMsg: Message = {
           id: (Date.now() + 1).toString(),
-          text: `Perfect! I've got all your information:
-
-📝 Name: ${formData.name}
-📧 Email: ${formData.email}
-🏢 Company: ${formData.company}
-📞 Phone: ${messageText}
-
-✅ Your demo has been successfully scheduled!
-
-Our team will contact you shortly at ${formData.email} to confirm your demo slot and answer any specific questions about your operation. We typically get back to you within 24 hours.
-
-In the meantime, feel free to ask me any other questions about Farness or our services!`,
+          text: 'Which industry best matches your operation?',
           sender: 'bot',
           timestamp: new Date(),
+          suggestions: industries,
         };
-        setMessages((prev) => [...prev, completeMsg]);
-        setIsCollectingInfo(false);
-        setInfoStep(null);
+        setMessages((prev) => [...prev, nextMsg]);
         setIsLoading(false);
+        return;
+      } else if (scheduleStep === 'industry') {
+        if (!industries.includes(messageText)) {
+          const invalidMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            text: `Please select one of: ${industries.join(', ')}`,
+            sender: 'bot',
+            timestamp: new Date(),
+            suggestions: industries,
+          };
+          setMessages((prev) => [...prev, invalidMsg]);
+          setIsLoading(false);
+          return;
+        }
+        setScheduleData((prev) => ({ ...prev, industry: messageText }));
+        setScheduleStep('challenge');
+        const nextMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          text: 'What\'s your biggest operational challenge right now? (optional - press skip or just describe it)',
+          sender: 'bot',
+          timestamp: new Date(),
+          suggestions: ['Skip this', 'Safety concerns', 'Cost reduction', 'Operational efficiency'],
+        };
+        setMessages((prev) => [...prev, nextMsg]);
+        setIsLoading(false);
+        return;
+      } else if (scheduleStep === 'challenge') {
+        if (messageText.toLowerCase() !== 'skip this') {
+          setScheduleData((prev) => ({ ...prev, challenge: messageText }));
+        }
+        setScheduleStep(null);
+        await handleScheduleSubmit();
+        setIsLoading(false);
+        return;
       }
+    }
+
+    // Check if user wants to schedule
+    if (messageText.toLowerCase().includes('schedule') || messageText.toLowerCase().includes('demo')) {
+      setScheduleStep('name');
+      const scheduleMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: 'Great! Let\'s get you scheduled. What\'s your first name?',
+        sender: 'bot',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, scheduleMsg]);
+      setIsLoading(false);
       return;
     }
 
-    // Update conversation history
-    const updatedHistory = [
-      ...conversationHistory,
-      { role: 'user', content: messageText },
-    ];
-
-    // Get response from Groq API
+    // Regular conversation - call LLM
+    const updatedHistory = [...conversationHistory, { role: 'user', content: messageText }];
     const botResponse = await callGroqAPI(messageText, conversationHistory);
 
-    // Update conversation history with bot response
-    const newHistory = [
+    setConversationHistory([
       ...updatedHistory,
       { role: 'assistant', content: botResponse },
-    ];
-    setConversationHistory(newHistory);
+    ]);
 
-    // Add bot response message
+    const suggestions = getSuggestedQuestions(messageText);
+
     const botMessage: Message = {
       id: (Date.now() + 1).toString(),
       text: botResponse,
       sender: 'bot',
       timestamp: new Date(),
+      suggestions: suggestions,
     };
     setMessages((prev) => [...prev, botMessage]);
     setIsLoading(false);
-
-    // Check if user wants to schedule demo
-    const schedulingKeywords = ['schedule', 'demo', 'book', 'booking', 'appointment'];
-    const wantsScheduling = schedulingKeywords.some((keyword) =>
-      messageText.toLowerCase().includes(keyword)
-    );
-
-    if (wantsScheduling && !isCollectingInfo) {
-      setTimeout(() => {
-        setIsCollectingInfo(true);
-        setInfoStep('name');
-        const scheduleMsg: Message = {
-          id: (Date.now() + 2).toString(),
-          text: `Great! I can help you schedule a demo. To get started, could you please tell me your name?`,
-          sender: 'bot',
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, scheduleMsg]);
-      }, 500);
-    }
   };
-
-  const suggestedQuestions = [
-    'What is Farness?',
-    'How does it work?',
-    'Industries & use cases',
-    'Pricing & ROI',
-    'Schedule a demo',
-  ];
 
   return (
     <>
@@ -240,13 +366,13 @@ In the meantime, feel free to ask me any other questions about Farness or our se
             exit={{ opacity: 0, scale: 0.8, y: 20 }}
             transition={{ duration: 0.2 }}
             className="fixed bottom-24 right-4 w-96 max-w-[calc(100vw-32px)] bg-white dark:bg-slate-900 rounded-2xl shadow-2xl dark:shadow-black/40 border border-gray-200 dark:border-white/10 overflow-hidden flex flex-col z-40"
-            style={{ height: '600px' }}
+            style={{ height: '650px' }}
           >
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-cyan-600 text-white px-6 py-4 flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-lg">Farness Bot</h3>
-                <p className="text-sm text-blue-100">Powered by AI - Always learning</p>
+                <p className="text-sm text-blue-100">Always ready to help</p>
               </div>
               <button
                 onClick={() => setIsOpen(false)}
@@ -272,7 +398,7 @@ In the meantime, feel free to ask me any other questions about Farness or our se
                         : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-white rounded-bl-none border border-gray-200 dark:border-white/10'
                     }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.text}</p>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
                   </div>
                 </motion.div>
               ))}
@@ -293,19 +419,18 @@ In the meantime, feel free to ask me any other questions about Farness or our se
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Quick Questions */}
-            {!isCollectingInfo && messages.length <= 2 && !isLoading && (
+            {/* Suggestions */}
+            {messages.length > 0 && messages[messages.length - 1].sender === 'bot' && messages[messages.length - 1].suggestions && !isLoading && (
               <div className="px-6 py-4 border-t border-gray-200 dark:border-white/10 bg-white dark:bg-slate-900">
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 font-semibold">Quick questions:</p>
                 <div className="flex flex-wrap gap-2">
-                  {suggestedQuestions.map((question) => (
+                  {messages[messages.length - 1].suggestions?.map((suggestion) => (
                     <button
-                      key={question}
-                      onClick={() => handleSendMessage(question)}
+                      key={suggestion}
+                      onClick={() => handleSendMessage(suggestion)}
                       disabled={isLoading}
-                      className="text-xs bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-300 px-3 py-1.5 rounded-full transition-colors whitespace-nowrap disabled:opacity-50"
+                      className="text-xs bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 text-blue-700 dark:text-blue-300 px-3 py-2 rounded-full transition-colors disabled:opacity-50 border border-blue-200 dark:border-blue-800 font-medium whitespace-nowrap"
                     >
-                      {question}
+                      {suggestion}
                     </button>
                   ))}
                 </div>
@@ -320,7 +445,7 @@ In the meantime, feel free to ask me any other questions about Farness or our se
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Ask me anything..."
+                  placeholder={scheduleStep ? 'Your response...' : 'Ask me anything...'}
                   disabled={isLoading}
                   className="flex-1 bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 />
