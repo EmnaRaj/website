@@ -140,17 +140,14 @@ export default function ChatBot() {
         setMessages((prev) => [...prev, botMsg]);
         setIsLoading(false);
       } else if (infoStep === 'phone') {
-        setFormData((prev) => ({ ...prev, phone: messageText }));
-
-        // Schedule complete - send to backend or handle
-        const completeData = {
+        const completedFormData = {
           ...formData,
           phone: messageText,
           timestamp: new Date().toISOString(),
         };
 
-        // Here you would normally send this to your backend
-        console.log('Demo scheduled with info:', completeData);
+        // Schedule complete - send to backend or handle
+        console.log('Demo scheduled with info:', completedFormData);
 
         const completeMsg: Message = {
           id: (Date.now() + 1).toString(),
@@ -161,9 +158,11 @@ export default function ChatBot() {
 🏢 Company: ${formData.company}
 📞 Phone: ${messageText}
 
-Our team will contact you shortly at ${formData.email} to confirm your demo and answer any specific questions about your operation. We typically get back to you within 24 hours.
+✅ Your demo has been successfully scheduled!
 
-Is there anything else you'd like to know about Farness in the meantime?`,
+Our team will contact you shortly at ${formData.email} to confirm your demo slot and answer any specific questions about your operation. We typically get back to you within 24 hours.
+
+In the meantime, feel free to ask me any other questions about Farness or our services!`,
           sender: 'bot',
           timestamp: new Date(),
         };
